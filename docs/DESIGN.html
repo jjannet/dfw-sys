@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dfw-sys — Database Schema + โครง Solution (ร่างเพื่อ review)</title>
+<style>
+:root { --ink:#1a1f2b; --muted:#5b6477; --line:#e3e7ef; --accent:#2563eb; --bg:#f7f8fb; --card:#ffffff; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Segoe UI','SF Pro Text','Noto Sans Thai',Sarabun,Tahoma,sans-serif;
+  line-height:1.7; font-size:16px; }
+main { max-width:920px; margin:0 auto; padding:48px 32px 96px; }
+h1 { font-size:1.9em; border-bottom:3px solid var(--accent); padding-bottom:.4em; margin-top:0; }
+h2 { font-size:1.45em; margin-top:2.2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+h3 { font-size:1.15em; margin-top:1.8em; color:#1e3a8a; }
+a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+blockquote { margin:1em 0; padding:.6em 1em; border-left:4px solid var(--accent);
+  background:#eef3fe; color:var(--muted); border-radius:0 8px 8px 0; }
+blockquote p { margin:.2em 0; }
+code { font-family:'Cascadia Code',Menlo,Consolas,monospace; font-size:.88em;
+  background:#edf0f6; padding:.12em .4em; border-radius:4px; }
+pre { background:#0f172a; color:#dbe4f3; padding:18px 20px; border-radius:10px;
+  overflow-x:auto; line-height:1.45; }
+pre code { background:none; color:inherit; padding:0; font-size:.85em; }
+table { border-collapse:collapse; width:100%; margin:1.2em 0; background:var(--card);
+  border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(15,23,42,.08); }
+th { background:#1e3a8a; color:#fff; text-align:left; padding:10px 14px; font-weight:600; }
+td { padding:9px 14px; border-top:1px solid var(--line); vertical-align:top; }
+tr:nth-child(even) td { background:#fafbfe; }
+ul,ol { padding-left:1.5em; }
+li { margin:.25em 0; }
+hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
+.meta { color:var(--muted); font-size:.85em; margin-bottom:2em; }
+@media print { body { background:#fff; } main { padding:0; max-width:none; } }
+</style>
+</head>
+<body>
+<main>
+<h1 id="dfw-sys-database-schema-solution-review">dfw-sys — Database Schema + โครง Solution (ร่างเพื่อ review)</h1>
+<blockquote>
+<p>ร่างวันที่ 2026-06-12 ต่อจาก <a href="SPEC.html">SPEC.md</a> — ยังไม่เริ่ม code รอ review
+สิ่งที่ต้องตัดสินใจหลัง review อยู่ท้ายเอกสาร (ข้อ 5)</p>
+</blockquote>
+<h2 id="1-schema">1. หลักการออกแบบ schema</h2>
+<p><strong>ใช้ EF Core migrations กับ PostgreSQL (Npgsql)</strong> — ทีมคุ้น EF Core จาก framework เดิมอยู่แล้ว และใช้ extension <code>vector</code> (pgvector) กับ full-text search ของ Postgres ใน database เดียว</p>
+<p><strong>Graph แบบ "typed nodes + node registry":</strong> entity แต่ละชนิดมีตารางของตัวเอง (query สะดวก, มี FK จริง) แต่ทุก row จะลงทะเบียนใน <code>catalog_nodes</code> ด้วย เพื่อให้ตาราง <code>relations</code> (edges) ชี้หา node ชนิดไหนก็ได้โดยยังมี FK integrity — ได้ทั้งความเป็น graph และความเป็น relational</p>
+<p><strong>สองชั้น auto/manual ในทุก entity ของ catalog:</strong></p>
+<ul>
+<li>คอลัมน์โครงสร้าง (path, method, ชื่อ table ฯลฯ) — scan เป็นคนดูแล ทับได้</li>
+<li><code>scan_meta jsonb</code> — รายละเอียดเพิ่มเติมจาก scan (signature, file path, commit) ทับทั้งก้อนทุกรอบ scan</li>
+<li>คอลัมน์ curated (<code>owner</code>, <code>purpose</code>, <code>usage_notes</code>) — แก้จาก UI เท่านั้น scan ห้ามแตะ</li>
+</ul>
+<h2 id="2">2. ตาราง (จัดกลุ่มตามหน้าที่)</h2>
+<h3 id="21-catalog-graph">2.1 Catalog graph</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>catalog_nodes</code></td>
+<td><code>id uuid PK</code>, <code>node_type</code> (registry กลางของทุก node — ทุกตารางด้านล่างมี FK 1:1 มาที่นี่)</td>
+</tr>
+<tr>
+<td><code>zones</code></td>
+<td>id, <code>key</code> (core, dxc, …), name, <code>zone_type</code> (core/product)</td>
+</tr>
+<tr>
+<td><code>repos</code></td>
+<td>id, <strong><code>repo_url</code> unique (natural key)</strong>, <code>repo_type</code> (service/submodule), <code>submodule_kind</code> (intercom/shared-api/shared-ui, null ถ้าเป็น service), zone_id, name, <code>has_tenant_db bool</code> — curated: owner, purpose, notes</td>
+</tr>
+<tr>
+<td><code>endpoints</code></td>
+<td>id, repo_id, <code>protocol</code> (http/grpc), http: method+path / grpc: proto_service+method, scan_meta — curated: purpose, usage_notes</td>
+</tr>
+<tr>
+<td><code>functions</code></td>
+<td>id, repo_id, name, file_path, scan_meta — curated: description</td>
+</tr>
+<tr>
+<td><code>db_objects</code></td>
+<td>id, <code>object_type</code> (table/view/table_type/sql_file/stored_proc/redis_key/mongo_collection), name, <code>owner_repo_id</code> (จาก prefix), <code>database_scope</code> (main/tenant ถ้ารู้), scan_meta — curated: purpose</td>
+</tr>
+<tr>
+<td><code>config_items</code></td>
+<td>id, repo_id, key, <code>config_location</code> (จุดที่ config), scan_meta — curated: purpose</td>
+</tr>
+<tr>
+<td><code>deploy_groups</code></td>
+<td>id, name, pod_selector + <code>deploy_group_members</code> (group_id, repo_id) — ใช้ฝั่ง monitoring เท่านั้น</td>
+</tr>
+<tr>
+<td><code>relations</code></td>
+<td>id, <code>source_node_id FK→catalog_nodes</code>, <code>target_node_id FK→catalog_nodes</code>, <code>relation_type</code> (calls / uses_submodule / reads / writes / configured_at), <code>version_ref</code> (branch/commit — ใช้กับ uses_submodule), <code>origin</code> (scanned/manual), <code>scanned_commit</code>, created_at/by — unique กัน edge ซ้ำ</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-scan">2.2 Scan</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scan_runs</code></td>
+<td>id, repo_id, branch, commit, pushed_by (user), started_at, finished_at, <code>summary jsonb</code> (เพิ่ม/ลบ/แก้กี่รายการ)</td>
+</tr>
+<tr>
+<td><code>skills</code></td>
+<td>id, <code>skill_key</code> (scan / error-hunt), version, <code>content</code> (markdown), is_active, updated_by/at — skill เก็บในระบบ มี version history ในตัว (row ละ version, active ทีละอัน)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-appsettings-log-targets">2.3 AppSettings + Log targets</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_settings</code></td>
+<td>id, repo_id, <code>environment</code> (dev/sit/uat/production), <code>content_encrypted bytea</code>, updated_by/at — unique (repo, env)</td>
+</tr>
+<tr>
+<td><code>app_settings_history</code></td>
+<td>snapshot เดิมทุกครั้งที่แก้ (ดูย้อน/กู้คืนได้)</td>
+</tr>
+<tr>
+<td><code>log_targets</code></td>
+<td>id, zone_id, <code>target_type</code> (seq/jaeger), url, <code>auth_type</code> (none/api_key/basic), <code>secret_encrypted</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-case-knowledge-base">2.4 Case knowledge base</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cases</code></td>
+<td>id, title, symptom, <code>error_signature</code> (ไว้จับซ้ำ), <code>investigation</code> (markdown — ขั้นตอนที่ใช้ตามหา), root_cause, fix_temporary, fix_permanent, <code>status</code> (open/recurring/fixed_permanently), created_by/at</td>
+</tr>
+<tr>
+<td><code>case_occurrences</code></td>
+<td>case_id, occurred_at, noted_by, notes — เกิดซ้ำบันทึกที่นี่ ไม่สร้าง case ใหม่</td>
+</tr>
+<tr>
+<td><code>case_links</code></td>
+<td>case_id, node_id FK→catalog_nodes — ผูก case เข้า service/endpoint ใน graph</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-users-auth-audit">2.5 Users / Auth / Audit</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>id, email unique, entra_object_id, display_name, <code>status</code> (invited/active/disabled) — admin ไม่อยู่ใน DB, เช็คจาก email list ใน <code>.env</code> ตอน login</td>
+</tr>
+<tr>
+<td><code>invitations</code></td>
+<td>id, email, invited_by, invited_at, accepted_at</td>
+</tr>
+<tr>
+<td><code>product_editors</code></td>
+<td>user_id, zone_id — role แก้ไขราย product (view ทุกคนเห็นหมด)</td>
+</tr>
+<tr>
+<td><code>pat_tokens</code></td>
+<td>id, user_id, name, <code>token_hash</code> (เก็บ hash ไม่เก็บตัวจริง), created_at, last_used_at, expires_at, revoked_at</td>
+</tr>
+<tr>
+<td><code>audit_logs</code></td>
+<td>id, actor_user_id, <code>via</code> (ui/scan/mcp), action, node_type, node_id, <code>diff jsonb</code>, scan_run_id (ถ้ามาจาก scan), created_at</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-rag">2.6 RAG</h3>
+<table>
+<thead>
+<tr>
+<th>ตาราง</th>
+<th>คอลัมน์หลัก</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rag_documents</code></td>
+<td>id, node_id FK→catalog_nodes (รวม case ด้วย), <code>content</code> (การ์ดข้อความที่ render), <code>embedding vector(1024)</code> (bge-m3), <code>content_tsv tsvector</code> (full-text), updated_at — มี trigger/outbox ให้ re-index เมื่อ entity เปลี่ยน</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-solution-monorepo">3. โครง Solution (monorepo)</h2>
+<pre><code>dfw-sys/
+├── docs/                          # SPEC, DESIGN, ADR ต่อ ๆ ไป
+├── server/
+│   ├── DfwSys.sln
+│   ├── src/
+│   │   ├── DfwSys.Api/            # .NET 10 Web API host — controllers, auth (Entra OIDC), DI
+│   │   ├── DfwSys.Core/           # domain: entities, business rules, interfaces (ไม่พึ่ง infra)
+│   │   ├── DfwSys.Infrastructure/ # EF Core + Npgsql + pgvector, encryption, audit,
+│   │   │                          #   vLLM clients (embed/rerank/chat), RAG engine
+│   │   └── DfwSys.Contracts/      # DTOs ที่ใช้ร่วมกับ client: scan payload, API models
+│   └── tests/
+│       └── DfwSys.Api.Tests/
+├── client/
+│   ├── DfwClient.sln              # อ้าง DfwSys.Contracts ด้วย project reference (monorepo)
+│   └── src/
+│       ├── DfwClient/             # daemon host: localhost REST + MCP server (streamable HTTP),
+│       │                          #   PAT config, origin check, self-update check
+│       └── DfwClient.Connectors/  # Seq, Jaeger, OpenShift (เรียก oc / kubeconfig ของ user)
+├── ui/                            # Angular 22 workspace + PrimeNG
+│   └── src/app/
+│       ├── core/                  # auth, api client, layout
+│       └── features/              # catalog, graph-explorer, monitoring, cases,
+│                                  #   appsettings, ai-search, admin
+├── deploy/
+│   ├── docker-compose.yml         # postgres(+pgvector), api, ui (nginx)
+│   └── .env.example               # admin emails, encryption key, Entra app, vLLM endpoints
+└── README.md
+</code></pre>
+<p>จุดที่จงใจเลือก:</p>
+<ul>
+<li><strong><code>DfwSys.Contracts</code> เป็น project เดียวที่ server กับ client ใช้ร่วม</strong> — contract ของ <code>push_scan</code> อยู่ที่เดียว แก้แล้วเห็นพร้อมกันสองฝั่ง</li>
+<li>client แยก solution เพราะ build target ต่างกัน (publish self-contained win-x64 / osx-arm64) แต่ยังอยู่ repo เดียว</li>
+<li>RAG ไม่แยกเป็น service ต่างหาก — เป็น module ใน Infrastructure เรียก vLLM ที่รันอยู่แล้วผ่าน HTTP (ลด process บนเครื่องที่ memory ตึง)</li>
+</ul>
+<h2 id="4-flow-schema">4. Flow สำคัญที่กระทบ schema</h2>
+<p><strong>push_scan (upsert ชั้น auto):</strong> เปิด <code>scan_runs</code> → upsert nodes ตามโครงสร้างที่ scan เจอ (เทียบของเดิมด้วย natural key: repo_url, method+path, ชื่อ table) → ของที่หายไปจาก scan = soft-delete (mark <code>removed_at</code> ไม่ลบจริง เพื่อให้ curated data ไม่หาย ถ้า scan รอบหน้าเจออีกค่อยปลุกคืน) → replace edges ที่ <code>origin=scanned</code> ของ repo นั้น → ปิด run + audit + คิว re-index RAG</p>
+<p><strong>PAT auth:</strong> client ส่ง token → server เทียบ hash → ได้ user → สิทธิ์เท่ากับ user คนนั้น (editor ราย product มีผลกับ MCP ด้วย)</p>
+<p><strong>Encryption:</strong> <code>app_settings.content_encrypted</code> และ <code>log_targets.secret_encrypted</code> ใช้ AES-256-GCM, key อยู่ใน <code>.env</code> ของ server เท่านั้น — decrypt ฝั่ง server ตอนเสิร์ฟให้ user ที่ login แล้ว</p>
+<h2 id="5-review">5. จุดที่อยากให้ตัดสินใจตอน review</h2>
+<ol>
+<li><strong>Soft-delete ตอน scan ไม่เจอของเดิม</strong> (ข้อ 4) — โอเคไหม หรืออยากให้ลบจริง?</li>
+<li><strong>PAT มีวันหมดอายุไหม</strong> — เสนอ default 90 วัน ต่ออายุได้จากหน้า web (ปลอดภัยกว่า token ถาวร)</li>
+<li><strong>ชื่อ namespace</strong> ผมใช้ <code>DfwSys</code> / <code>DfwClient</code> — ถ้ามี convention ขององค์กร (เช่น prefix บริษัท) บอกได้</li>
+<li><strong>Angular structure</strong> ใช้ workspace เดี่ยว ไม่แยก lib — พอสำหรับทีมขนาดนี้ ถ้าอยากแยก shared UI lib แต่แรกบอกได้</li>
+</ol>
+</main>
+</body>
+</html>
