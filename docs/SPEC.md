@@ -47,7 +47,7 @@ Framework ภายในเป็น microservice (.NET 6 + Angular) มี ser
 - **HTTP ข้าม service:** `IDFWRestClient` + section `DFWRestSetting` ใน appsettings (Core, ErpSrc, Storage, Hrs, Travel ฯลฯ)
 - **Controller:** `[Route("api/v{version:apiVersion}/[controller]")]` + `[Authorize]` + AutoWrapper ครอบ response
 - **EF Core:** DbContext หลัก + `TenantDbContext` (inherit `BaseTenantDbContext`, สลับ connection ตาม token/`TenantDbContextSettings`) / table prefix จริง: core ใช้ schema (เช่น `Config`) + prefix `MS_` (master), `TX_` (transaction); product ใช้ `DXC_PDOC_MS_…` / มี attribute `[TableType(MASTER)]` บน entity / migrations อยู่ `Service.API/Migrations/` (แยก `TenantDb/`)
-- **appsettings จริง:** `appsettings.{Development,Dev,Sit,Uat,Production}.json` + ตัว `*Debug` (DevDebug/SitDebug/UatDebug) — UI มี env `qas` เพิ่ม → **environment ในระบบต้องเป็น list ยืดหยุ่น ไม่ fix 4 ค่า**
+- **appsettings จริง:** `appsettings.{Development,Dev,Sit,Uat,Production}.json` + ตัว `*Debug` (DevDebug/SitDebug/UatDebug) → **environment ในระบบเป็นค่าอิสระ ไม่ fix enum** (หมายเหตุ: `qas` ที่เจอใน UI เป็นของเก่าลืมลบ ไม่ใช้)
 - **Logging:** Serilog + Seq sink, URL pattern `do65005-dxc-be-pttdigital-dxc-os-seq-prd` / IDS: `StartupHelper.SetIdentityServer` ชี้ IDS ที่ core
 - **Angular UI เรียก API:** `${environment.apis.{service}}/api/v1/{Resource}/{action}` โดย `environment.apis` map ชื่อ service → URL ผ่าน api gateway — scanner ฝั่ง UI หา pattern นี้
 - **C# namespace ของ service จริงใช้ generic** (`Config.API`, `Service.API`) — ไม่มี company prefix ใน namespace

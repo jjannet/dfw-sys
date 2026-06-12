@@ -232,6 +232,8 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 ├── ui/                            # Angular 22 workspace + PrimeNG
 │   └── src/app/
 │       ├── core/                  # auth, api client, layout
+│       ├── shared/                # UI kit กลาง: wrapper components ครอบ PrimeNG + theme,
+│       │                          #   pipes, directives — feature ต้องใช้จากตรงนี้เท่านั้น
 │       └── features/              # catalog, graph-explorer, monitoring, cases,
 │                                  #   appsettings, ai-search, admin
 ├── deploy/
@@ -253,8 +255,8 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <ol>
 <li><strong>Soft-delete</strong> ✅ — ตอน scan ไม่เจอของเดิมให้ mark <code>removed_at</code> ไม่ลบจริง และ <strong>UI ต้องดูย้อนหลังได้ว่าอะไรถูกลบไปตอนไหน</strong> (มุมมองประวัติการลบ)</li>
 <li><strong>PAT หมดอายุ 90 วัน</strong> ✅ — ต่ออายุ/ออกใหม่จากหน้า web, ไม่มี token ถาวร (PAT = token ที่ client ใช้ authen กับ server)</li>
-<li><strong>Namespace ใช้ <code>DfwSys</code> / <code>DfwClient</code></strong> ✅ — จาก repo จริง C# namespace ของ framework ใช้ชื่อ generic (<code>Config.API</code>, <code>Service.API</code>) ไม่มี company prefix อยู่แล้ว และ dfw-sys เป็นระบบแยกจาก framework จึงไม่ต้องตามรูปแบบ repo naming (<code>be-pttdigital-…</code>)</li>
-<li><strong>Angular เป็น app เดี่ยว ไม่แยก library</strong> ✅ — UI จริงของ framework ก็เป็น app เดี่ยว + submodule; dfw-sys ไม่มีแผนแชร์ UI ไป app อื่น แยก lib ไปก็เพิ่ม overhead เปล่า</li>
+<li><strong>Namespace ใช้ <code>DfwSys</code> / <code>DfwClient</code></strong> ✅ — user confirm แล้ว</li>
+<li><strong>Angular เป็น app เดี่ยว + แยก <code>shared/</code> เป็น UI kit กลาง</strong> ✅ — ไม่แยกเป็น library แต่บังคับโครง folder: ทุก component ที่ใช้ซ้ำ (ปุ่ม ตาราง ฟอร์ม dialog) อยู่ใน <code>shared/</code> เป็น wrapper ครอบ PrimeNG ผูกกับ theme กลาง — <strong>feature ห้ามแต่ง style เอง ต้องใช้ของจาก <code>shared/</code></strong> เพื่อให้ทั้ง project คุม style จุดเดียว theme ไม่หลุด</li>
 </ol>
 <h2 id="6-scan-patterns-repo-input-scan-skill">6. Scan patterns จาก repo ตัวอย่าง (input ของ scan skill)</h2>
 <p>จากการสำรวจ <code>be-pttdigital-dfw-cs-config</code>, <code>be-pttdigital-dxc-cs-pdoc</code>, <code>fe-pttdigital-dxc-ui-main</code>:</p>

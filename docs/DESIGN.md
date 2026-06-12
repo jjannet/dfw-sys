@@ -94,6 +94,8 @@ dfw-sys/
 ├── ui/                            # Angular 22 workspace + PrimeNG
 │   └── src/app/
 │       ├── core/                  # auth, api client, layout
+│       ├── shared/                # UI kit กลาง: wrapper components ครอบ PrimeNG + theme,
+│       │                          #   pipes, directives — feature ต้องใช้จากตรงนี้เท่านั้น
 │       └── features/              # catalog, graph-explorer, monitoring, cases,
 │                                  #   appsettings, ai-search, admin
 ├── deploy/
@@ -120,8 +122,8 @@ dfw-sys/
 
 1. **Soft-delete** ✅ — ตอน scan ไม่เจอของเดิมให้ mark `removed_at` ไม่ลบจริง และ **UI ต้องดูย้อนหลังได้ว่าอะไรถูกลบไปตอนไหน** (มุมมองประวัติการลบ)
 2. **PAT หมดอายุ 90 วัน** ✅ — ต่ออายุ/ออกใหม่จากหน้า web, ไม่มี token ถาวร (PAT = token ที่ client ใช้ authen กับ server)
-3. **Namespace ใช้ `DfwSys` / `DfwClient`** ✅ — จาก repo จริง C# namespace ของ framework ใช้ชื่อ generic (`Config.API`, `Service.API`) ไม่มี company prefix อยู่แล้ว และ dfw-sys เป็นระบบแยกจาก framework จึงไม่ต้องตามรูปแบบ repo naming (`be-pttdigital-…`)
-4. **Angular เป็น app เดี่ยว ไม่แยก library** ✅ — UI จริงของ framework ก็เป็น app เดี่ยว + submodule; dfw-sys ไม่มีแผนแชร์ UI ไป app อื่น แยก lib ไปก็เพิ่ม overhead เปล่า
+3. **Namespace ใช้ `DfwSys` / `DfwClient`** ✅ — user confirm แล้ว
+4. **Angular เป็น app เดี่ยว + แยก `shared/` เป็น UI kit กลาง** ✅ — ไม่แยกเป็น library แต่บังคับโครง folder: ทุก component ที่ใช้ซ้ำ (ปุ่ม ตาราง ฟอร์ม dialog) อยู่ใน `shared/` เป็น wrapper ครอบ PrimeNG ผูกกับ theme กลาง — **feature ห้ามแต่ง style เอง ต้องใช้ของจาก `shared/`** เพื่อให้ทั้ง project คุม style จุดเดียว theme ไม่หลุด
 
 ## 6. Scan patterns จาก repo ตัวอย่าง (input ของ scan skill)
 
