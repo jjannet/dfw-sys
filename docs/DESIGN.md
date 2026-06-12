@@ -98,9 +98,14 @@ dfw-sys/
 │       │                          #   pipes, directives — feature ต้องใช้จากตรงนี้เท่านั้น
 │       └── features/              # catalog, graph-explorer, monitoring, cases,
 │                                  #   appsettings, ai-search, admin
+├── .github/workflows/
+│   └── deploy.yml                 # self-hosted runner บนเครื่องนี้: detect-changes (api/ui)
+│                                  #   → copy .env จาก action-runner/envs/dfw-sys/
+│                                  #   → docker compose up -d --build → image prune
 ├── deploy/
-│   ├── docker-compose.yml         # postgres(+pgvector), api, ui (nginx)
+│   ├── docker-compose.yml         # postgres(+pgvector), api, ui (nginx) — ทุก image เป็น arm64
 │   └── .env.example               # admin emails, encryption key, Entra app, vLLM endpoints
+│                                  #   (.env จริงอยู่ที่ /home/jjannet/shared/action-runner/envs/dfw-sys/)
 └── README.md
 ```
 

@@ -132,6 +132,15 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 </tr>
 </tbody>
 </table>
+<h3 id="deployment">Deployment</h3>
+<p>Deploy ด้วย <strong>GitHub Actions + self-hosted runner บนเครื่องนี้เอง</strong> (runner <code>jj-ai-srv-e249-arm64</code> อยู่ที่ <code>/home/jjannet/shared/action-runner</code>) ตาม pattern เดียวกับ project อื่นบน server นี้:</p>
+<ul>
+<li>Workflow trigger: push branch หลัก + <code>workflow_dispatch</code> / มี detect-changes แยกว่าแก้ส่วนไหน (api / ui) deploy เฉพาะส่วนนั้น</li>
+<li>Deploy = <code>docker compose up -d --build</code> บนเครื่องนี้ ตามด้วย <code>docker image prune -f</code></li>
+<li><strong>Secrets/.env ไม่อยู่ใน repo</strong> — เก็บที่ <code>/home/jjannet/shared/action-runner/envs/dfw-sys/.env</code> แล้ว workflow copy เข้า checkout ตอน deploy (convention เดียวกับ project อื่นใน <code>envs/</code>)</li>
+<li>หมายเหตุ build: เครื่องเป็น <strong>aarch64</strong> — image ทุกตัวต้องเป็น arm64</li>
+<li>⚠️ <strong>ต้องจัดการก่อนใช้:</strong> runner ตัวนี้ register กับ org <code>github.com/independev-th</code> แต่ repo dfw-sys อยู่ที่ <code>github.com/jjannet</code> → ต้องย้าย repo เข้า org หรือ register runner เพิ่มให้ repo/account นี้</li>
+</ul>
 <h2 id="4-architecture">4. Architecture</h2>
 <pre><code>                    เครื่อง Lenovo PGX (server dfw-sys)
 ┌──────────────────────────────────────────────────────────────────┐
@@ -358,7 +367,8 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <li>~~Jaeger production expose ผ่านอะไร~~ → <strong>ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth</strong></li>
 <li>~~รายละเอียด OpenShift~~ → <strong>ตอบแล้ว: ผ่าน <code>oc</code> CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login</strong></li>
 <li>~~รูปแบบ repo จริง~~ → <strong>ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2</strong></li>
-<li><strong>Production cluster ของ OpenShift</strong>: ตัวอย่างที่เห็นเป็น dev cluster (<code>apps.ocpdev</code>) — prod อยู่คนละ cluster ต้อง login แยก; URL อะไร และ user ทั่วไปมีสิทธิ์เข้า prod ไหม (กระทบ tool <code>get_pod_logs</code> ใน phase 3)</li>
+<li>~~Production cluster ของ OpenShift~~ → <strong>ตอบแล้ว: prod คนละ cluster คนละ URL (dev/sit/uat อยู่ cluster เดียวกัน) — เป็นหน้าที่ user ต้อง <code>oc login</code> cluster ที่ถูกต้องเอง tool แค่ฟ้องชัด ๆ ว่า login อยู่ cluster ไหน/ยังไม่ได้ login</strong></li>
+<li><strong>GitHub runner กับ repo คนละ owner</strong>: runner register กับ org <code>independev-th</code> แต่ repo อยู่ <code>github.com/jjannet</code> — ต้องย้าย repo เข้า org หรือลง runner เพิ่ม (ต้องเคลียร์ก่อนทำ CI/CD)</li>
 <li>ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต</li>
 </ul>
 <h2 id="13">13. ขั้นต่อไป</h2>

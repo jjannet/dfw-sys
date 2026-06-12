@@ -70,6 +70,16 @@ Framework ภายในเป็น microservice (.NET 6 + Angular) มี ser
 | LLM stack | vLLM ที่รันอยู่แล้ว: `bge-m3` (embeddings), `bge-reranker-v2-m3`, `Qwen3.6-35B-A3B` fp8 131k ctx tool-calling, `typhoon-ocr-7b` |
 | Server | Lenovo PGX — NVIDIA GB10 (Grace Blackwell), 119 GiB unified memory, 20 cores, aarch64. GPU mem ถูกจองแล้ว ~75% — ต้องคุม memory ของระบบ |
 
+### Deployment
+
+Deploy ด้วย **GitHub Actions + self-hosted runner บนเครื่องนี้เอง** (runner `jj-ai-srv-e249-arm64` อยู่ที่ `/home/jjannet/shared/action-runner`) ตาม pattern เดียวกับ project อื่นบน server นี้:
+
+- Workflow trigger: push branch หลัก + `workflow_dispatch` / มี detect-changes แยกว่าแก้ส่วนไหน (api / ui) deploy เฉพาะส่วนนั้น
+- Deploy = `docker compose up -d --build` บนเครื่องนี้ ตามด้วย `docker image prune -f`
+- **Secrets/.env ไม่อยู่ใน repo** — เก็บที่ `/home/jjannet/shared/action-runner/envs/dfw-sys/.env` แล้ว workflow copy เข้า checkout ตอน deploy (convention เดียวกับ project อื่นใน `envs/`)
+- หมายเหตุ build: เครื่องเป็น **aarch64** — image ทุกตัวต้องเป็น arm64
+- ⚠️ **ต้องจัดการก่อนใช้:** runner ตัวนี้ register กับ org `github.com/independev-th` แต่ repo dfw-sys อยู่ที่ `github.com/jjannet` → ต้องย้าย repo เข้า org หรือ register runner เพิ่มให้ repo/account นี้
+
 ## 4. Architecture
 
 ```
@@ -228,7 +238,8 @@ MCP server อยู่ที่ client → auth จุดเดียว (PAT) 
 - ~~Jaeger production expose ผ่านอะไร~~ → **ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth**
 - ~~รายละเอียด OpenShift~~ → **ตอบแล้ว: ผ่าน `oc` CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login**
 - ~~รูปแบบ repo จริง~~ → **ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2**
-- **Production cluster ของ OpenShift**: ตัวอย่างที่เห็นเป็น dev cluster (`apps.ocpdev`) — prod อยู่คนละ cluster ต้อง login แยก; URL อะไร และ user ทั่วไปมีสิทธิ์เข้า prod ไหม (กระทบ tool `get_pod_logs` ใน phase 3)
+- ~~Production cluster ของ OpenShift~~ → **ตอบแล้ว: prod คนละ cluster คนละ URL (dev/sit/uat อยู่ cluster เดียวกัน) — เป็นหน้าที่ user ต้อง `oc login` cluster ที่ถูกต้องเอง tool แค่ฟ้องชัด ๆ ว่า login อยู่ cluster ไหน/ยังไม่ได้ login**
+- **GitHub runner กับ repo คนละ owner**: runner register กับ org `independev-th` แต่ repo อยู่ `github.com/jjannet` — ต้องย้าย repo เข้า org หรือลง runner เพิ่ม (ต้องเคลียร์ก่อนทำ CI/CD)
 - ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต
 
 ## 13. ขั้นต่อไป
