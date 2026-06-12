@@ -32,6 +32,25 @@ Framework ภายในเป็น microservice (.NET 6 + Angular) มี ser
 - Log: **Seq แยกตามกลุ่ม** (core 1 ตัว + product ละ 1 ตัว, auth ด้วย API key) + **Jaeger 1 ตัว** ทั้ง framework (ไม่มี auth ในตัว — ต้องเช็คว่า expose ผ่านอะไร)
 - Deploy บน OpenShift มีการ **group service** — 1 pod อาจรัน ~4 services (มีผลตอน monitor log, ไม่มีผลตอน relation)
 - Environment: dev / sit / uat / production — **ระบบ focus production เท่านั้น** (ฝั่ง monitoring) เพื่อให้ใช้ง่าย ไม่ซับซ้อน
+- **Jaeger production เปิดโล่ง ไม่มี auth** — แค่ต้องอยู่ใน internal network
+- OpenShift: client เรียกผ่าน **`oc` CLI ของ user** — ต้อง handle เคส oc ไม่ได้ติดตั้ง / ยังไม่ login ให้ฟ้องชัดเจน
+
+### Conventions ที่พบจาก repo ตัวอย่างจริง
+
+ตัวอย่าง 3 repo อยู่ที่ `/home/jjannet/shared/projects/ex-dfw-project/`:
+`be-pttdigital-dfw-cs-config` (core service) · `be-pttdigital-dxc-cs-pdoc` (product service) · `fe-pttdigital-dxc-ui-main` (product UI)
+
+- **ชื่อ repo:** `be-pttdigital-{zone}-cs-{service}` / `fe-pttdigital-{zone}-ui-{name}` / submodule `-mw-` (backend), `-md-` (frontend) — zone code: `dfw` = core, `dxc` = product / git อยู่ที่ `git.pttdigital.com` group `do64002-dfw`, `do65005-dxc`
+- **Submodules backend:** `dfw-mw-core`, `dfw-mw-shared`, `dfw-mw-intercom` (proto กลาง), `dfw-mw-utils`, `dfw-mw-biz`, `dfw-mw-erp` + ฝั่ง product มี `dxc-mw-intercom`, `dxc-mw-biz` ของตัวเอง — pin ด้วย commit (บางตัว track branch เช่น dev)
+- **Submodules frontend:** `src/@core` (auth/layout/interceptor), `src/@shared` (ของ product), `src/@doc`
+- **gRPC:** service ฝั่งรับ inherit `{Name}Proto.{Name}ProtoBase` + `MapGrpcService<T>()` / ฝั่งเรียกลงทะเบียน `AddGrpcClient<T>` หรือ extension `AddGrpcClientCorrelation<T>` / `AddGrpcClientCustomHeader<T>` โดย URL มาจาก `GrcpServiceSetting` ใน appsettings → **map client→target service ได้จาก config ตรง ๆ**
+- **HTTP ข้าม service:** `IDFWRestClient` + section `DFWRestSetting` ใน appsettings (Core, ErpSrc, Storage, Hrs, Travel ฯลฯ)
+- **Controller:** `[Route("api/v{version:apiVersion}/[controller]")]` + `[Authorize]` + AutoWrapper ครอบ response
+- **EF Core:** DbContext หลัก + `TenantDbContext` (inherit `BaseTenantDbContext`, สลับ connection ตาม token/`TenantDbContextSettings`) / table prefix จริง: core ใช้ schema (เช่น `Config`) + prefix `MS_` (master), `TX_` (transaction); product ใช้ `DXC_PDOC_MS_…` / มี attribute `[TableType(MASTER)]` บน entity / migrations อยู่ `Service.API/Migrations/` (แยก `TenantDb/`)
+- **appsettings จริง:** `appsettings.{Development,Dev,Sit,Uat,Production}.json` + ตัว `*Debug` (DevDebug/SitDebug/UatDebug) — UI มี env `qas` เพิ่ม → **environment ในระบบต้องเป็น list ยืดหยุ่น ไม่ fix 4 ค่า**
+- **Logging:** Serilog + Seq sink, URL pattern `do65005-dxc-be-pttdigital-dxc-os-seq-prd` / IDS: `StartupHelper.SetIdentityServer` ชี้ IDS ที่ core
+- **Angular UI เรียก API:** `${environment.apis.{service}}/api/v1/{Resource}/{action}` โดย `environment.apis` map ชื่อ service → URL ผ่าน api gateway — scanner ฝั่ง UI หา pattern นี้
+- **C# namespace ของ service จริงใช้ generic** (`Config.API`, `Service.API`) — ไม่มี company prefix ใน namespace
 
 ## 3. Tech stack ของ dfw-sys
 
@@ -92,8 +111,8 @@ Framework ภายในเป็น microservice (.NET 6 + Angular) มี ser
 | ของ | เก็บที่ไหน |
 |---|---|
 | Seq API keys | ในระบบ dfw-sys (client มาขอตอนใช้) |
-| Jaeger | ออกแบบ LogTarget ให้ auth เป็น optional: none / API key header / basic — รอเช็คว่า Jaeger จริง expose ผ่านอะไร |
-| OpenShift | ใช้ login ของ user ที่เครื่อง (ต้อง `oc login` ก่อน) — ถือเป็นการเช็คสิทธิ์ด้วย เพราะแต่ละคนเห็น service ไม่เท่ากัน |
+| Jaeger | **เปิดโล่งใน internal network ไม่มี auth** — LogTarget ยังออกแบบ auth เป็น optional (none / API key header / basic) เผื่ออนาคต |
+| OpenShift | client เรียกผ่าน **`oc` CLI** ที่เครื่อง user (ต้อง `oc login` ก่อน — ถือเป็นการเช็คสิทธิ์ด้วย เพราะแต่ละคนเห็น service ไม่เท่ากัน) — ต้อง handle เคส oc ไม่ได้ติดตั้ง/ยังไม่ login ให้ฟ้องชัดเจน |
 | Database production | **ตัดออก — ไม่ต่อ database จริงเลย** ป้องกัน model เขียน data; DB catalog มาจากการ scan code ล้วน ๆ |
 | appsettings กลาง | เก็บในระบบ แยก environment (dev/sit/uat/production), **encrypt at rest**, ทุกคนที่ถูกเชิญเห็นได้หมด (ไม่ทำสิทธิ์รายคน — คุมยาก) |
 
@@ -199,9 +218,9 @@ MCP server อยู่ที่ client → auth จุดเดียว (PAT) 
 
 ## 12. Open questions
 
-- Jaeger production expose ผ่านอะไร (เปิดโล่งใน network / reverse proxy + auth แบบไหน) — ต้องรู้ก่อน phase 3
-- รายละเอียด OpenShift: ใช้ `oc` CLI ที่เครื่อง user หรือเรียก API ตรงด้วย token จาก kubeconfig
-- รูปแบบ repo จริง (โครง solution ของ service ตัวอย่าง) — จะมีผลกับความแม่นของ scan skill
+- ~~Jaeger production expose ผ่านอะไร~~ → **ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth**
+- ~~รายละเอียด OpenShift~~ → **ตอบแล้ว: ผ่าน `oc` CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login**
+- ~~รูปแบบ repo จริง~~ → **ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2**
 - ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต
 
 ## 13. ขั้นต่อไป

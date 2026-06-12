@@ -39,8 +39,8 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <main>
 <h1 id="dfw-sys-database-schema-solution-review">dfw-sys — Database Schema + โครง Solution (ร่างเพื่อ review)</h1>
 <blockquote>
-<p>ร่างวันที่ 2026-06-12 ต่อจาก <a href="SPEC.html">SPEC.md</a> — ยังไม่เริ่ม code รอ review
-สิ่งที่ต้องตัดสินใจหลัง review อยู่ท้ายเอกสาร (ข้อ 5)</p>
+<p>ร่างวันที่ 2026-06-12 ต่อจาก <a href="SPEC.html">SPEC.md</a> — <strong>review แล้ว ข้อตัดสินใจปิดครบ (ข้อ 5)</strong> พร้อมเริ่ม phase 1
+ข้อ 6 คือ scan patterns ที่ได้จากการสำรวจ repo ตัวอย่างจริง — เป็น input ของ scan skill ใน phase 2</p>
 </blockquote>
 <h2 id="1-schema">1. หลักการออกแบบ schema</h2>
 <p><strong>ใช้ EF Core migrations กับ PostgreSQL (Npgsql)</strong> — ทีมคุ้น EF Core จาก framework เดิมอยู่แล้ว และใช้ extension <code>vector</code> (pgvector) กับ full-text search ของ Postgres ใน database เดียว</p>
@@ -129,7 +129,7 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <tbody>
 <tr>
 <td><code>app_settings</code></td>
-<td>id, repo_id, <code>environment</code> (dev/sit/uat/production), <code>content_encrypted bytea</code>, updated_by/at — unique (repo, env)</td>
+<td>id, repo_id, <code>environment</code> (<strong>text อิสระ ไม่ fix enum</strong> — ของจริงมี Development/Dev/Sit/Uat/Production + ตัว *Debug และ UI มี qas), <code>content_encrypted bytea</code>, updated_by/at — unique (repo, env)</td>
 </tr>
 <tr>
 <td><code>app_settings_history</code></td>
@@ -249,13 +249,81 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <p><strong>push_scan (upsert ชั้น auto):</strong> เปิด <code>scan_runs</code> → upsert nodes ตามโครงสร้างที่ scan เจอ (เทียบของเดิมด้วย natural key: repo_url, method+path, ชื่อ table) → ของที่หายไปจาก scan = soft-delete (mark <code>removed_at</code> ไม่ลบจริง เพื่อให้ curated data ไม่หาย ถ้า scan รอบหน้าเจออีกค่อยปลุกคืน) → replace edges ที่ <code>origin=scanned</code> ของ repo นั้น → ปิด run + audit + คิว re-index RAG</p>
 <p><strong>PAT auth:</strong> client ส่ง token → server เทียบ hash → ได้ user → สิทธิ์เท่ากับ user คนนั้น (editor ราย product มีผลกับ MCP ด้วย)</p>
 <p><strong>Encryption:</strong> <code>app_settings.content_encrypted</code> และ <code>log_targets.secret_encrypted</code> ใช้ AES-256-GCM, key อยู่ใน <code>.env</code> ของ server เท่านั้น — decrypt ฝั่ง server ตอนเสิร์ฟให้ user ที่ login แล้ว</p>
-<h2 id="5-review">5. จุดที่อยากให้ตัดสินใจตอน review</h2>
+<h2 id="5-review-2026-06-12">5. ข้อตัดสินใจ (สรุปจาก review 2026-06-12)</h2>
 <ol>
-<li><strong>Soft-delete ตอน scan ไม่เจอของเดิม</strong> (ข้อ 4) — โอเคไหม หรืออยากให้ลบจริง?</li>
-<li><strong>PAT มีวันหมดอายุไหม</strong> — เสนอ default 90 วัน ต่ออายุได้จากหน้า web (ปลอดภัยกว่า token ถาวร)</li>
-<li><strong>ชื่อ namespace</strong> ผมใช้ <code>DfwSys</code> / <code>DfwClient</code> — ถ้ามี convention ขององค์กร (เช่น prefix บริษัท) บอกได้</li>
-<li><strong>Angular structure</strong> ใช้ workspace เดี่ยว ไม่แยก lib — พอสำหรับทีมขนาดนี้ ถ้าอยากแยก shared UI lib แต่แรกบอกได้</li>
+<li><strong>Soft-delete</strong> ✅ — ตอน scan ไม่เจอของเดิมให้ mark <code>removed_at</code> ไม่ลบจริง และ <strong>UI ต้องดูย้อนหลังได้ว่าอะไรถูกลบไปตอนไหน</strong> (มุมมองประวัติการลบ)</li>
+<li><strong>PAT หมดอายุ 90 วัน</strong> ✅ — ต่ออายุ/ออกใหม่จากหน้า web, ไม่มี token ถาวร (PAT = token ที่ client ใช้ authen กับ server)</li>
+<li><strong>Namespace ใช้ <code>DfwSys</code> / <code>DfwClient</code></strong> ✅ — จาก repo จริง C# namespace ของ framework ใช้ชื่อ generic (<code>Config.API</code>, <code>Service.API</code>) ไม่มี company prefix อยู่แล้ว และ dfw-sys เป็นระบบแยกจาก framework จึงไม่ต้องตามรูปแบบ repo naming (<code>be-pttdigital-…</code>)</li>
+<li><strong>Angular เป็น app เดี่ยว ไม่แยก library</strong> ✅ — UI จริงของ framework ก็เป็น app เดี่ยว + submodule; dfw-sys ไม่มีแผนแชร์ UI ไป app อื่น แยก lib ไปก็เพิ่ม overhead เปล่า</li>
 </ol>
+<h2 id="6-scan-patterns-repo-input-scan-skill">6. Scan patterns จาก repo ตัวอย่าง (input ของ scan skill)</h2>
+<p>จากการสำรวจ <code>be-pttdigital-dfw-cs-config</code>, <code>be-pttdigital-dxc-cs-pdoc</code>, <code>fe-pttdigital-dxc-ui-main</code>:</p>
+<table>
+<thead>
+<tr>
+<th>สิ่งที่หา</th>
+<th>Pattern ที่ scanner ใช้จับ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP endpoints</td>
+<td>controller ใน <code>Service.API/Controllers/V*/</code> + <code>[Route("api/v{version:apiVersion}/[controller]")]</code> + HTTP method attributes</td>
+</tr>
+<tr>
+<td>gRPC ฝั่งให้บริการ</td>
+<td>class inherit <code>{X}Proto.{X}ProtoBase</code> + <code>endpoints.MapGrpcService&lt;T&gt;()</code> ใน Startup</td>
+</tr>
+<tr>
+<td>gRPC ฝั่งเรียก</td>
+<td><code>AddGrpcClient&lt;T&gt;</code> / <code>AddGrpcClientCorrelation&lt;T&gt;</code> / <code>AddGrpcClientCustomHeader&lt;T&gt;</code> ใน Startup + section <code>GrcpServiceSetting</code> ใน appsettings → <strong>รู้ target service จากชื่อ setting ตรง ๆ</strong></td>
+</tr>
+<tr>
+<td>HTTP ฝั่งเรียก</td>
+<td><code>IDFWRestClient</code> + section <code>DFWRestSetting</code> ใน appsettings</td>
+</tr>
+<tr>
+<td>จุดเรียกจริงระดับ function</td>
+<td>การ inject/ใช้ <code>{X}ProtoClient</code> และ <code>IDFWRestClient</code> ใน Services/Repositories</td>
+</tr>
+<tr>
+<td>Tables</td>
+<td>EF entities + <code>IEntityTypeConfiguration&lt;T&gt;</code> + migrations — prefix: core = schema+<code>MS_</code>/<code>TX_</code>, product = <code>{ZONE}_{SVC}_MS_</code>/<code>TX_</code> + attribute <code>[TableType(MASTER)]</code></td>
+</tr>
+<tr>
+<td>Tenant pattern</td>
+<td>มี <code>TenantDbContext</code> / <code>BaseTenantDbContext</code> / <code>TenantDbContextSettings</code> → ติด flag <code>has_tenant_db</code></td>
+</tr>
+<tr>
+<td>Views / table types / SQL</td>
+<td>migration scripts (<code>migrationBuilder.Sql(...)</code>) + ไฟล์ <code>.sql</code> ใน repo (Dapper — สอง repo ตัวอย่างไม่มี แต่บาง project มี)</td>
+</tr>
+<tr>
+<td>Submodules</td>
+<td><code>.gitmodules</code> + commit ที่ pin (<code>git submodule status</code>) — backend: <code>*-mw-*</code> (core/shared/intercom/utils/biz/erp), frontend: <code>src/@core</code>, <code>src/@shared</code>, <code>src/@doc</code></td>
+</tr>
+<tr>
+<td>Config keys</td>
+<td>appsettings ทุก environment + ตัว <code>*Debug</code></td>
+</tr>
+<tr>
+<td>Redis / Mongo</td>
+<td><code>RedisSettings</code>, <code>SQLCacheRedis</code>, <code>TenantMongoDbContextSettings</code>, <code>CompanyMongoDbSettings</code></td>
+</tr>
+<tr>
+<td>UI → API</td>
+<td><code>${environment.apis.{service}}/api/v1/{Resource}/{action}</code> ใน Angular services + map <code>environment.apis</code> ใน <code>src/environments/</code></td>
+</tr>
+<tr>
+<td>Zone/service identity</td>
+<td><code>ProductName</code> + <code>ServiceName</code> ใน appsettings.json + ชื่อ repo <code>be-pttdigital-{zone}-cs-{service}</code></td>
+</tr>
+<tr>
+<td>Deploy/OpenShift naming</td>
+<td>namespace pattern <code>do{code}-{zone}-prd</code>, service DNS <code>do{code}-{zone}-be-pttdigital-{zone}-cs-{name}</code></td>
+</tr>
+</tbody>
+</table>
 </main>
 </body>
 </html>

@@ -69,6 +69,24 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <li>Log: <strong>Seq แยกตามกลุ่ม</strong> (core 1 ตัว + product ละ 1 ตัว, auth ด้วย API key) + <strong>Jaeger 1 ตัว</strong> ทั้ง framework (ไม่มี auth ในตัว — ต้องเช็คว่า expose ผ่านอะไร)</li>
 <li>Deploy บน OpenShift มีการ <strong>group service</strong> — 1 pod อาจรัน ~4 services (มีผลตอน monitor log, ไม่มีผลตอน relation)</li>
 <li>Environment: dev / sit / uat / production — <strong>ระบบ focus production เท่านั้น</strong> (ฝั่ง monitoring) เพื่อให้ใช้ง่าย ไม่ซับซ้อน</li>
+<li><strong>Jaeger production เปิดโล่ง ไม่มี auth</strong> — แค่ต้องอยู่ใน internal network</li>
+<li>OpenShift: client เรียกผ่าน <strong><code>oc</code> CLI ของ user</strong> — ต้อง handle เคส oc ไม่ได้ติดตั้ง / ยังไม่ login ให้ฟ้องชัดเจน</li>
+</ul>
+<h3 id="conventions-repo">Conventions ที่พบจาก repo ตัวอย่างจริง</h3>
+<p>ตัวอย่าง 3 repo อยู่ที่ <code>/home/jjannet/shared/projects/ex-dfw-project/</code>:
+<code>be-pttdigital-dfw-cs-config</code> (core service) · <code>be-pttdigital-dxc-cs-pdoc</code> (product service) · <code>fe-pttdigital-dxc-ui-main</code> (product UI)</p>
+<ul>
+<li><strong>ชื่อ repo:</strong> <code>be-pttdigital-{zone}-cs-{service}</code> / <code>fe-pttdigital-{zone}-ui-{name}</code> / submodule <code>-mw-</code> (backend), <code>-md-</code> (frontend) — zone code: <code>dfw</code> = core, <code>dxc</code> = product / git อยู่ที่ <code>git.pttdigital.com</code> group <code>do64002-dfw</code>, <code>do65005-dxc</code></li>
+<li><strong>Submodules backend:</strong> <code>dfw-mw-core</code>, <code>dfw-mw-shared</code>, <code>dfw-mw-intercom</code> (proto กลาง), <code>dfw-mw-utils</code>, <code>dfw-mw-biz</code>, <code>dfw-mw-erp</code> + ฝั่ง product มี <code>dxc-mw-intercom</code>, <code>dxc-mw-biz</code> ของตัวเอง — pin ด้วย commit (บางตัว track branch เช่น dev)</li>
+<li><strong>Submodules frontend:</strong> <code>src/@core</code> (auth/layout/interceptor), <code>src/@shared</code> (ของ product), <code>src/@doc</code></li>
+<li><strong>gRPC:</strong> service ฝั่งรับ inherit <code>{Name}Proto.{Name}ProtoBase</code> + <code>MapGrpcService&lt;T&gt;()</code> / ฝั่งเรียกลงทะเบียน <code>AddGrpcClient&lt;T&gt;</code> หรือ extension <code>AddGrpcClientCorrelation&lt;T&gt;</code> / <code>AddGrpcClientCustomHeader&lt;T&gt;</code> โดย URL มาจาก <code>GrcpServiceSetting</code> ใน appsettings → <strong>map client→target service ได้จาก config ตรง ๆ</strong></li>
+<li><strong>HTTP ข้าม service:</strong> <code>IDFWRestClient</code> + section <code>DFWRestSetting</code> ใน appsettings (Core, ErpSrc, Storage, Hrs, Travel ฯลฯ)</li>
+<li><strong>Controller:</strong> <code>[Route("api/v{version:apiVersion}/[controller]")]</code> + <code>[Authorize]</code> + AutoWrapper ครอบ response</li>
+<li><strong>EF Core:</strong> DbContext หลัก + <code>TenantDbContext</code> (inherit <code>BaseTenantDbContext</code>, สลับ connection ตาม token/<code>TenantDbContextSettings</code>) / table prefix จริง: core ใช้ schema (เช่น <code>Config</code>) + prefix <code>MS_</code> (master), <code>TX_</code> (transaction); product ใช้ <code>DXC_PDOC_MS_…</code> / มี attribute <code>[TableType(MASTER)]</code> บน entity / migrations อยู่ <code>Service.API/Migrations/</code> (แยก <code>TenantDb/</code>)</li>
+<li><strong>appsettings จริง:</strong> <code>appsettings.{Development,Dev,Sit,Uat,Production}.json</code> + ตัว <code>*Debug</code> (DevDebug/SitDebug/UatDebug) — UI มี env <code>qas</code> เพิ่ม → <strong>environment ในระบบต้องเป็น list ยืดหยุ่น ไม่ fix 4 ค่า</strong></li>
+<li><strong>Logging:</strong> Serilog + Seq sink, URL pattern <code>do65005-dxc-be-pttdigital-dxc-os-seq-prd</code> / IDS: <code>StartupHelper.SetIdentityServer</code> ชี้ IDS ที่ core</li>
+<li><strong>Angular UI เรียก API:</strong> <code>${environment.apis.{service}}/api/v1/{Resource}/{action}</code> โดย <code>environment.apis</code> map ชื่อ service → URL ผ่าน api gateway — scanner ฝั่ง UI หา pattern นี้</li>
+<li><strong>C# namespace ของ service จริงใช้ generic</strong> (<code>Config.API</code>, <code>Service.API</code>) — ไม่มี company prefix ใน namespace</li>
 </ul>
 <h2 id="3-tech-stack-dfw-sys">3. Tech stack ของ dfw-sys</h2>
 <table>
@@ -159,11 +177,11 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 </tr>
 <tr>
 <td>Jaeger</td>
-<td>ออกแบบ LogTarget ให้ auth เป็น optional: none / API key header / basic — รอเช็คว่า Jaeger จริง expose ผ่านอะไร</td>
+<td><strong>เปิดโล่งใน internal network ไม่มี auth</strong> — LogTarget ยังออกแบบ auth เป็น optional (none / API key header / basic) เผื่ออนาคต</td>
 </tr>
 <tr>
 <td>OpenShift</td>
-<td>ใช้ login ของ user ที่เครื่อง (ต้อง <code>oc login</code> ก่อน) — ถือเป็นการเช็คสิทธิ์ด้วย เพราะแต่ละคนเห็น service ไม่เท่ากัน</td>
+<td>client เรียกผ่าน <strong><code>oc</code> CLI</strong> ที่เครื่อง user (ต้อง <code>oc login</code> ก่อน — ถือเป็นการเช็คสิทธิ์ด้วย เพราะแต่ละคนเห็น service ไม่เท่ากัน) — ต้อง handle เคส oc ไม่ได้ติดตั้ง/ยังไม่ login ให้ฟ้องชัดเจน</td>
 </tr>
 <tr>
 <td>Database production</td>
@@ -328,9 +346,9 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <p>เหตุผล: จบ phase 2 ระบบมีมูลค่าทันที (ตอบ "เส้นนี้ใครเป็นเจ้าของ ใครเรียกบ้าง" ได้) ก่อนลงทุนกับ monitoring และ AI</p>
 <h2 id="12-open-questions">12. Open questions</h2>
 <ul>
-<li>Jaeger production expose ผ่านอะไร (เปิดโล่งใน network / reverse proxy + auth แบบไหน) — ต้องรู้ก่อน phase 3</li>
-<li>รายละเอียด OpenShift: ใช้ <code>oc</code> CLI ที่เครื่อง user หรือเรียก API ตรงด้วย token จาก kubeconfig</li>
-<li>รูปแบบ repo จริง (โครง solution ของ service ตัวอย่าง) — จะมีผลกับความแม่นของ scan skill</li>
+<li>~~Jaeger production expose ผ่านอะไร~~ → <strong>ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth</strong></li>
+<li>~~รายละเอียด OpenShift~~ → <strong>ตอบแล้ว: ผ่าน <code>oc</code> CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login</strong></li>
+<li>~~รูปแบบ repo จริง~~ → <strong>ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2</strong></li>
 <li>ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต</li>
 </ul>
 <h2 id="13">13. ขั้นต่อไป</h2>

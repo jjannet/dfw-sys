@@ -1,7 +1,7 @@
 # dfw-sys — Database Schema + โครง Solution (ร่างเพื่อ review)
 
-> ร่างวันที่ 2026-06-12 ต่อจาก [SPEC.md](SPEC.md) — ยังไม่เริ่ม code รอ review
-> สิ่งที่ต้องตัดสินใจหลัง review อยู่ท้ายเอกสาร (ข้อ 5)
+> ร่างวันที่ 2026-06-12 ต่อจาก [SPEC.md](SPEC.md) — **review แล้ว ข้อตัดสินใจปิดครบ (ข้อ 5)** พร้อมเริ่ม phase 1
+> ข้อ 6 คือ scan patterns ที่ได้จากการสำรวจ repo ตัวอย่างจริง — เป็น input ของ scan skill ใน phase 2
 
 ## 1. หลักการออกแบบ schema
 
@@ -42,7 +42,7 @@
 
 | ตาราง | คอลัมน์หลัก |
 |---|---|
-| `app_settings` | id, repo_id, `environment` (dev/sit/uat/production), `content_encrypted bytea`, updated_by/at — unique (repo, env) |
+| `app_settings` | id, repo_id, `environment` (**text อิสระ ไม่ fix enum** — ของจริงมี Development/Dev/Sit/Uat/Production + ตัว *Debug และ UI มี qas), `content_encrypted bytea`, updated_by/at — unique (repo, env) |
 | `app_settings_history` | snapshot เดิมทุกครั้งที่แก้ (ดูย้อน/กู้คืนได้) |
 | `log_targets` | id, zone_id, `target_type` (seq/jaeger), url, `auth_type` (none/api_key/basic), `secret_encrypted` |
 
@@ -116,9 +116,30 @@ dfw-sys/
 
 **Encryption:** `app_settings.content_encrypted` และ `log_targets.secret_encrypted` ใช้ AES-256-GCM, key อยู่ใน `.env` ของ server เท่านั้น — decrypt ฝั่ง server ตอนเสิร์ฟให้ user ที่ login แล้ว
 
-## 5. จุดที่อยากให้ตัดสินใจตอน review
+## 5. ข้อตัดสินใจ (สรุปจาก review 2026-06-12)
 
-1. **Soft-delete ตอน scan ไม่เจอของเดิม** (ข้อ 4) — โอเคไหม หรืออยากให้ลบจริง?
-2. **PAT มีวันหมดอายุไหม** — เสนอ default 90 วัน ต่ออายุได้จากหน้า web (ปลอดภัยกว่า token ถาวร)
-3. **ชื่อ namespace** ผมใช้ `DfwSys` / `DfwClient` — ถ้ามี convention ขององค์กร (เช่น prefix บริษัท) บอกได้
-4. **Angular structure** ใช้ workspace เดี่ยว ไม่แยก lib — พอสำหรับทีมขนาดนี้ ถ้าอยากแยก shared UI lib แต่แรกบอกได้
+1. **Soft-delete** ✅ — ตอน scan ไม่เจอของเดิมให้ mark `removed_at` ไม่ลบจริง และ **UI ต้องดูย้อนหลังได้ว่าอะไรถูกลบไปตอนไหน** (มุมมองประวัติการลบ)
+2. **PAT หมดอายุ 90 วัน** ✅ — ต่ออายุ/ออกใหม่จากหน้า web, ไม่มี token ถาวร (PAT = token ที่ client ใช้ authen กับ server)
+3. **Namespace ใช้ `DfwSys` / `DfwClient`** ✅ — จาก repo จริง C# namespace ของ framework ใช้ชื่อ generic (`Config.API`, `Service.API`) ไม่มี company prefix อยู่แล้ว และ dfw-sys เป็นระบบแยกจาก framework จึงไม่ต้องตามรูปแบบ repo naming (`be-pttdigital-…`)
+4. **Angular เป็น app เดี่ยว ไม่แยก library** ✅ — UI จริงของ framework ก็เป็น app เดี่ยว + submodule; dfw-sys ไม่มีแผนแชร์ UI ไป app อื่น แยก lib ไปก็เพิ่ม overhead เปล่า
+
+## 6. Scan patterns จาก repo ตัวอย่าง (input ของ scan skill)
+
+จากการสำรวจ `be-pttdigital-dfw-cs-config`, `be-pttdigital-dxc-cs-pdoc`, `fe-pttdigital-dxc-ui-main`:
+
+| สิ่งที่หา | Pattern ที่ scanner ใช้จับ |
+|---|---|
+| HTTP endpoints | controller ใน `Service.API/Controllers/V*/` + `[Route("api/v{version:apiVersion}/[controller]")]` + HTTP method attributes |
+| gRPC ฝั่งให้บริการ | class inherit `{X}Proto.{X}ProtoBase` + `endpoints.MapGrpcService<T>()` ใน Startup |
+| gRPC ฝั่งเรียก | `AddGrpcClient<T>` / `AddGrpcClientCorrelation<T>` / `AddGrpcClientCustomHeader<T>` ใน Startup + section `GrcpServiceSetting` ใน appsettings → **รู้ target service จากชื่อ setting ตรง ๆ** |
+| HTTP ฝั่งเรียก | `IDFWRestClient` + section `DFWRestSetting` ใน appsettings |
+| จุดเรียกจริงระดับ function | การ inject/ใช้ `{X}ProtoClient` และ `IDFWRestClient` ใน Services/Repositories |
+| Tables | EF entities + `IEntityTypeConfiguration<T>` + migrations — prefix: core = schema+`MS_`/`TX_`, product = `{ZONE}_{SVC}_MS_`/`TX_` + attribute `[TableType(MASTER)]` |
+| Tenant pattern | มี `TenantDbContext` / `BaseTenantDbContext` / `TenantDbContextSettings` → ติด flag `has_tenant_db` |
+| Views / table types / SQL | migration scripts (`migrationBuilder.Sql(...)`) + ไฟล์ `.sql` ใน repo (Dapper — สอง repo ตัวอย่างไม่มี แต่บาง project มี) |
+| Submodules | `.gitmodules` + commit ที่ pin (`git submodule status`) — backend: `*-mw-*` (core/shared/intercom/utils/biz/erp), frontend: `src/@core`, `src/@shared`, `src/@doc` |
+| Config keys | appsettings ทุก environment + ตัว `*Debug` |
+| Redis / Mongo | `RedisSettings`, `SQLCacheRedis`, `TenantMongoDbContextSettings`, `CompanyMongoDbSettings` |
+| UI → API | `${environment.apis.{service}}/api/v1/{Resource}/{action}` ใน Angular services + map `environment.apis` ใน `src/environments/` |
+| Zone/service identity | `ProductName` + `ServiceName` ใน appsettings.json + ชื่อ repo `be-pttdigital-{zone}-cs-{service}` |
+| Deploy/OpenShift naming | namespace pattern `do{code}-{zone}-prd`, service DNS `do{code}-{zone}-be-pttdigital-{zone}-cs-{name}` |
