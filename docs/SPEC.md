@@ -49,6 +49,13 @@ Framework ภายในเป็น microservice (.NET 6 + Angular) มี ser
 - **EF Core:** DbContext หลัก + `TenantDbContext` (inherit `BaseTenantDbContext`, สลับ connection ตาม token/`TenantDbContextSettings`) / table prefix จริง: core ใช้ schema (เช่น `Config`) + prefix `MS_` (master), `TX_` (transaction); product ใช้ `DXC_PDOC_MS_…` / มี attribute `[TableType(MASTER)]` บน entity / migrations อยู่ `Service.API/Migrations/` (แยก `TenantDb/`)
 - **appsettings จริง:** `appsettings.{Development,Dev,Sit,Uat,Production}.json` + ตัว `*Debug` (DevDebug/SitDebug/UatDebug) → **environment ในระบบเป็นค่าอิสระ ไม่ fix enum** (หมายเหตุ: `qas` ที่เจอใน UI เป็นของเก่าลืมลบ ไม่ใช้)
 - **Logging:** Serilog + Seq sink, URL pattern `do65005-dxc-be-pttdigital-dxc-os-seq-prd` / IDS: `StartupHelper.SetIdentityServer` ชี้ IDS ที่ core
+- **OpenShift (จาก oc output ตัวอย่าง, dev cluster):**
+    - namespace = `do{code}-{zone}-{env}` (เจอ dev / sbx / sit / uat — **production อยู่คนละ cluster**, route dev = `*.apps.ocpdev.pttdigital.com`)
+    - service เดี่ยว pod ชื่อ `…-cs-{name}-{env}`, **service แบบ group ชื่อ `…-gs-{groupname}-{env}`** — pod มี **1 container เสมอ**, group = 1 process .NET รันหลาย service ข้างใน เปิด port เป็นคู่ HTTP/gRPC ต่อ service (เช่น 5017/5117, 5037/5137, …)
+    - **แต่ละ logical service ใน group ยังมี k8s Service ของตัวเอง** (`…-cs-keyvault-dev` ฯลฯ ชี้เข้า pod ของ group) → **map service→pod หาได้อัตโนมัติ**ผ่าน `oc get svc/endpoints` ไม่ต้องกรอกมือ
+    - log ของทุก service ใน group ปนกันใน stdout เดียว → ดู log ราย service ใช้ Seq เป็นหลัก (มี ServiceName property), pod log ใช้ดู crash/startup
+    - config มี 3 ชั้นเป็น ConfigMap/Secret: `ut-oc-cconf` (core/common), `ut-oc-pconf` (product), `ut-oc-aconf-{app}` (ราย app) + env `ASPNETCORE_ENVIRONMENT` — เป็น "จุดที่ config" อีกประเภทใน config catalog นอกจาก appsettings
+    - image tag = `{env}-{commit สั้น}` (เช่น `dev-1439b1`) → รู้ version ที่ deploy จาก tag ได้ / Redis รันเป็น pod `…-cd-rd*`
 - **Angular UI เรียก API:** `${environment.apis.{service}}/api/v1/{Resource}/{action}` โดย `environment.apis` map ชื่อ service → URL ผ่าน api gateway — scanner ฝั่ง UI หา pattern นี้
 - **C# namespace ของ service จริงใช้ generic** (`Config.API`, `Service.API`) — ไม่มี company prefix ใน namespace
 
@@ -221,6 +228,7 @@ MCP server อยู่ที่ client → auth จุดเดียว (PAT) 
 - ~~Jaeger production expose ผ่านอะไร~~ → **ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth**
 - ~~รายละเอียด OpenShift~~ → **ตอบแล้ว: ผ่าน `oc` CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login**
 - ~~รูปแบบ repo จริง~~ → **ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2**
+- **Production cluster ของ OpenShift**: ตัวอย่างที่เห็นเป็น dev cluster (`apps.ocpdev`) — prod อยู่คนละ cluster ต้อง login แยก; URL อะไร และ user ทั่วไปมีสิทธิ์เข้า prod ไหม (กระทบ tool `get_pod_logs` ใน phase 3)
 - ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต
 
 ## 13. ขั้นต่อไป

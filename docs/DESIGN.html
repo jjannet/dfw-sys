@@ -91,7 +91,7 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 </tr>
 <tr>
 <td><code>deploy_groups</code></td>
-<td>id, name, pod_selector + <code>deploy_group_members</code> (group_id, repo_id) — ใช้ฝั่ง monitoring เท่านั้น</td>
+<td>id, name (เช่น <code>gs-coreutils</code>), + <code>deploy_group_members</code> (group_id, repo_id) — ใช้ฝั่ง monitoring เท่านั้น; <strong>derive อัตโนมัติได้จาก oc</strong> (k8s Service ราย service ชี้เข้า pod ของ group) เก็บใน catalog เป็น snapshot/cache ไม่ต้องกรอกมือ</td>
 </tr>
 <tr>
 <td><code>relations</code></td>
@@ -322,7 +322,7 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 </tr>
 <tr>
 <td>Deploy/OpenShift naming</td>
-<td>namespace pattern <code>do{code}-{zone}-prd</code>, service DNS <code>do{code}-{zone}-be-pttdigital-{zone}-cs-{name}</code></td>
+<td>namespace <code>do{code}-{zone}-{env}</code> (env: dev/sbx/sit/uat, prd คนละ cluster), pod เดี่ยว <code>…-cs-{name}-{env}</code> / group <code>…-gs-{group}-{env}</code> (1 container, หลาย service ใน process เดียว, port คู่ HTTP/gRPC ต่อ service), k8s Service ราย logical service → ใช้ resolve pod อัตโนมัติ, ConfigMap/Secret 3 ชั้น <code>ut-oc-{c\|p\|a}conf</code>, image tag <code>{env}-{commit}</code></td>
 </tr>
 </tbody>
 </table>

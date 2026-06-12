@@ -28,7 +28,7 @@
 | `functions` | id, repo_id, name, file_path, scan_meta — curated: description |
 | `db_objects` | id, `object_type` (table/view/table_type/sql_file/stored_proc/redis_key/mongo_collection), name, `owner_repo_id` (จาก prefix), `database_scope` (main/tenant ถ้ารู้), scan_meta — curated: purpose |
 | `config_items` | id, repo_id, key, `config_location` (จุดที่ config), scan_meta — curated: purpose |
-| `deploy_groups` | id, name, pod_selector + `deploy_group_members` (group_id, repo_id) — ใช้ฝั่ง monitoring เท่านั้น |
+| `deploy_groups` | id, name (เช่น `gs-coreutils`), + `deploy_group_members` (group_id, repo_id) — ใช้ฝั่ง monitoring เท่านั้น; **derive อัตโนมัติได้จาก oc** (k8s Service ราย service ชี้เข้า pod ของ group) เก็บใน catalog เป็น snapshot/cache ไม่ต้องกรอกมือ |
 | `relations` | id, `source_node_id FK→catalog_nodes`, `target_node_id FK→catalog_nodes`, `relation_type` (calls / uses_submodule / reads / writes / configured_at), `version_ref` (branch/commit — ใช้กับ uses_submodule), `origin` (scanned/manual), `scanned_commit`, created_at/by — unique กัน edge ซ้ำ |
 
 ### 2.2 Scan
@@ -144,4 +144,4 @@ dfw-sys/
 | Redis / Mongo | `RedisSettings`, `SQLCacheRedis`, `TenantMongoDbContextSettings`, `CompanyMongoDbSettings` |
 | UI → API | `${environment.apis.{service}}/api/v1/{Resource}/{action}` ใน Angular services + map `environment.apis` ใน `src/environments/` |
 | Zone/service identity | `ProductName` + `ServiceName` ใน appsettings.json + ชื่อ repo `be-pttdigital-{zone}-cs-{service}` |
-| Deploy/OpenShift naming | namespace pattern `do{code}-{zone}-prd`, service DNS `do{code}-{zone}-be-pttdigital-{zone}-cs-{name}` |
+| Deploy/OpenShift naming | namespace `do{code}-{zone}-{env}` (env: dev/sbx/sit/uat, prd คนละ cluster), pod เดี่ยว `…-cs-{name}-{env}` / group `…-gs-{group}-{env}` (1 container, หลาย service ใน process เดียว, port คู่ HTTP/gRPC ต่อ service), k8s Service ราย logical service → ใช้ resolve pod อัตโนมัติ, ConfigMap/Secret 3 ชั้น `ut-oc-{c\|p\|a}conf`, image tag `{env}-{commit}` |

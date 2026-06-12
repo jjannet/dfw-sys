@@ -85,6 +85,15 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <li><strong>EF Core:</strong> DbContext หลัก + <code>TenantDbContext</code> (inherit <code>BaseTenantDbContext</code>, สลับ connection ตาม token/<code>TenantDbContextSettings</code>) / table prefix จริง: core ใช้ schema (เช่น <code>Config</code>) + prefix <code>MS_</code> (master), <code>TX_</code> (transaction); product ใช้ <code>DXC_PDOC_MS_…</code> / มี attribute <code>[TableType(MASTER)]</code> บน entity / migrations อยู่ <code>Service.API/Migrations/</code> (แยก <code>TenantDb/</code>)</li>
 <li><strong>appsettings จริง:</strong> <code>appsettings.{Development,Dev,Sit,Uat,Production}.json</code> + ตัว <code>*Debug</code> (DevDebug/SitDebug/UatDebug) → <strong>environment ในระบบเป็นค่าอิสระ ไม่ fix enum</strong> (หมายเหตุ: <code>qas</code> ที่เจอใน UI เป็นของเก่าลืมลบ ไม่ใช้)</li>
 <li><strong>Logging:</strong> Serilog + Seq sink, URL pattern <code>do65005-dxc-be-pttdigital-dxc-os-seq-prd</code> / IDS: <code>StartupHelper.SetIdentityServer</code> ชี้ IDS ที่ core</li>
+<li><strong>OpenShift (จาก oc output ตัวอย่าง, dev cluster):</strong><ul>
+<li>namespace = <code>do{code}-{zone}-{env}</code> (เจอ dev / sbx / sit / uat — <strong>production อยู่คนละ cluster</strong>, route dev = <code>*.apps.ocpdev.pttdigital.com</code>)</li>
+<li>service เดี่ยว pod ชื่อ <code>…-cs-{name}-{env}</code>, <strong>service แบบ group ชื่อ <code>…-gs-{groupname}-{env}</code></strong> — pod มี <strong>1 container เสมอ</strong>, group = 1 process .NET รันหลาย service ข้างใน เปิด port เป็นคู่ HTTP/gRPC ต่อ service (เช่น 5017/5117, 5037/5137, …)</li>
+<li><strong>แต่ละ logical service ใน group ยังมี k8s Service ของตัวเอง</strong> (<code>…-cs-keyvault-dev</code> ฯลฯ ชี้เข้า pod ของ group) → <strong>map service→pod หาได้อัตโนมัติ</strong>ผ่าน <code>oc get svc/endpoints</code> ไม่ต้องกรอกมือ</li>
+<li>log ของทุก service ใน group ปนกันใน stdout เดียว → ดู log ราย service ใช้ Seq เป็นหลัก (มี ServiceName property), pod log ใช้ดู crash/startup</li>
+<li>config มี 3 ชั้นเป็น ConfigMap/Secret: <code>ut-oc-cconf</code> (core/common), <code>ut-oc-pconf</code> (product), <code>ut-oc-aconf-{app}</code> (ราย app) + env <code>ASPNETCORE_ENVIRONMENT</code> — เป็น "จุดที่ config" อีกประเภทใน config catalog นอกจาก appsettings</li>
+<li>image tag = <code>{env}-{commit สั้น}</code> (เช่น <code>dev-1439b1</code>) → รู้ version ที่ deploy จาก tag ได้ / Redis รันเป็น pod <code>…-cd-rd*</code></li>
+</ul>
+</li>
 <li><strong>Angular UI เรียก API:</strong> <code>${environment.apis.{service}}/api/v1/{Resource}/{action}</code> โดย <code>environment.apis</code> map ชื่อ service → URL ผ่าน api gateway — scanner ฝั่ง UI หา pattern นี้</li>
 <li><strong>C# namespace ของ service จริงใช้ generic</strong> (<code>Config.API</code>, <code>Service.API</code>) — ไม่มี company prefix ใน namespace</li>
 </ul>
@@ -349,6 +358,7 @@ hr { border:none; border-top:1px solid var(--line); margin:2.5em 0; }
 <li>~~Jaeger production expose ผ่านอะไร~~ → <strong>ตอบแล้ว: เปิดโล่ง internal network ไม่มี auth</strong></li>
 <li>~~รายละเอียด OpenShift~~ → <strong>ตอบแล้ว: ผ่าน <code>oc</code> CLI ของ user, handle เคสไม่ได้ลง/ไม่ได้ login</strong></li>
 <li>~~รูปแบบ repo จริง~~ → <strong>ตอบแล้ว: ดู "Conventions ที่พบจาก repo ตัวอย่างจริง" ในข้อ 2</strong></li>
+<li><strong>Production cluster ของ OpenShift</strong>: ตัวอย่างที่เห็นเป็น dev cluster (<code>apps.ocpdev</code>) — prod อยู่คนละ cluster ต้อง login แยก; URL อะไร และ user ทั่วไปมีสิทธิ์เข้า prod ไหม (กระทบ tool <code>get_pod_logs</code> ใน phase 3)</li>
 <li>ส่วนอื่นที่ user อาจนึกออกเพิ่มในอนาคต</li>
 </ul>
 <h2 id="13">13. ขั้นต่อไป</h2>
